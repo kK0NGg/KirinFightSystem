@@ -34,6 +34,10 @@ public class ThirdPersonController : MonoBehaviour
     public Animator animator;
     public RuntimeAnimatorController animationController;
 
+    [Header("Collision Debug")]
+    public bool debugPlayerCollisions;
+    public bool drawPlayerCollisionGizmos = true;
+
     private CharacterController controller;
     private Vector3 velocity;
     private bool isGrounded;
@@ -47,6 +51,8 @@ public class ThirdPersonController : MonoBehaviour
     private int nextPunch = 1;
     private float lastPunchTime;
     private float punchTimer;
+    private Collider lastBlockingCollider;
+    private float lastCollisionLogTime = -1f;
 
     void Start()
     {
@@ -130,6 +136,53 @@ public class ThirdPersonController : MonoBehaviour
 
         animator?.SetBool("IsGrounded", isGrounded);
         animator?.SetBool("Falling", !isGrounded && velocity.y < 0f);
+    }
+
+    void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        if (!debugPlayerCollisions || hit.collider == null)
+            return;
+
+        if (lastBlockingCollider == hit.collider && Time.time - lastCollisionLogTime < 0.5f)
+            return;
+
+        lastBlockingCollider = hit.collider;
+        lastCollisionLogTime = Time.time;
+        Bounds colliderBounds = hit.collider.bounds;
+        Debug.Log(
+            $"Player CharacterController touched '{hit.collider.name}' "
+            + $"type: {hit.collider.GetType().Name}, root: {hit.collider.transform.root.name}, "
+            + $"layer: {LayerMask.LayerToName(hit.collider.gameObject.layer)}, tag: {hit.collider.tag}, "
+            + $"trigger: {hit.collider.isTrigger}, size: {colliderBounds.size}, point: {hit.point})",
+            hit.collider);
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        if (!drawPlayerCollisionGizmos)
+            return;
+
+        CharacterController characterController = GetComponent<CharacterController>();
+        if (characterController != null)
+        {
+            Gizmos.color = Color.yellow;
+            Matrix4x4 previousMatrix = Gizmos.matrix;
+            Gizmos.matrix = transform.localToWorldMatrix;
+            Vector3 center = characterController.center;
+            Vector3 size = new Vector3(characterController.radius * 2f, characterController.height, characterController.radius * 2f);
+            Gizmos.DrawWireCube(center, size);
+            Gizmos.matrix = previousMatrix;
+        }
+
+        Collider[] childColliders = GetComponentsInChildren<Collider>(true);
+        foreach (Collider childCollider in childColliders)
+        {
+            if (childCollider == null || childCollider is CharacterController)
+                continue;
+
+            Gizmos.color = childCollider.isTrigger ? Color.magenta : Color.red;
+            Gizmos.DrawWireCube(childCollider.bounds.center, childCollider.bounds.size);
+        }
     }
 
     void HandleMovement()
